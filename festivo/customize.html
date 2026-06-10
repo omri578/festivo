@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - התאמת משחק</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .remove-btn {
+      background: rgba(255,107,107,0.1);
+      border: 1px solid rgba(255,107,107,0.2);
+      color: var(--coral);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Poppins', sans-serif;
+    }
+    .remove-btn:hover { background: rgba(255,107,107,0.2); }
+    .pair-remove {
+      grid-column: 1/-1;
+      text-align: center;
+    }
+    .timer-select {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .timer-option {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .timer-option.selected {
+      border-color: var(--purple);
+      background: rgba(124,58,237,0.15);
+      color: var(--purple-light);
+    }
+    .sticky-save {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      padding: 16px 24px;
+      background: rgba(15,14,23,0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <a href="dashboard.html" class="logo">Festivo</a>
+    <div class="header-actions">
+      <div class="user-pill">
+        <div class="avatar" id="avatarEl"></div>
+        <span id="usernameEl"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrapper" style="padding-bottom:100px;">
+    <div class="container">
+      <div class="customize-header">
+        <a href="create.html" class="back-btn" id="backBtn">← חזרה לבחירת משחק</a>
+        <h1 id="pageTitle">התאמת משחק</h1>
+        <p id="pageSubtitle"></p>
+      </div>
+
+      <!-- General settings -->
+      <div class="section-card">
+        <h2>⚙️ הגדרות כלליות</h2>
+        <div class="input-group">
+          <label for="gameName">שם המשחק</label>
+          <input type="text" id="gameName" placeholder='לדוגמה: "חידון החתונה של דנה ורן"' />
+        </div>
+      </div>
+
+      <!-- Dynamic content area -->
+      <div id="gameContent"></div>
+    </div>
+  </div>
+
+  <!-- Sticky save bar -->
+  <div class="sticky-save">
+    <a href="create.html" class="btn btn-ghost">ביטול</a>
+    <button class="btn btn-primary" onclick="saveAndPlay()">
+      💾 שמור והתחל! →
+    </button>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    const user = AUTH.requireAuth();
+    const params = new URLSearchParams(location.search);
+    const gameType = params.get('game');
+    const editId = params.get('edit');
+    let currentConfig = {};
+    let timerSeconds = 30;
+
+    if (user) {
+      document.getElementById('usernameEl').textContent = user.username;
+      document.getElementById('avatarEl').textContent = user.username.charAt(0).toUpperCase();
+      init();
+    }
+
+    function init() {
+      let type = gameType;
+      let existingGame = null;
+
+      if (editId) {
+        existingGame = STORAGE.getGame(editId);
+        if (existingGame) {
+          type = existingGame.type;
+          document.getElementById('gameName').value = existingGame.name || '';
+          currentConfig = existingGame.config || {};
+          document.getElementById('backBtn').href = 'dashboard.html';
+        }
+      }
+
+      if (!type || !GAME_TYPES[type]) {
+        window.location.href = 'create.html';
+        return;
+      }
+
+      const gt = GAME_TYPES[type];
+      document.title = `Festivo - ${gt.name}`;
+      document.getElementById('pageTitle').textContent = `${gt.icon} ${gt.name}`;
+      document.getElementById('pageSubtitle').textContent = gt.description;
+
+      renderContent(type);
+    }
+
+    function renderContent(type) {
+      const content = document.getElementById('gameContent');
+      switch (type) {
+        case 'trivia':          content.innerHTML = renderTrivia(); break;
+        case 'truth-dare':      content.innerHTML = renderTruthDare(); break;
+        case 'would-rather':    content.innerHTML = renderWouldRather(); break;
+        case 'most-likely':     content.innerHTML = renderMostLikely(); break;
+        case 'hot-seat':        content.innerHTML = renderHotSeat(); break;
+        case 'emoji-riddles':   content.innerHTML = renderEmojiRiddles(); break;
+        case 'never-have-i':    content.innerHTML = renderNeverHaveI(); break;
+        case 'complete-lyrics': content.innerHTML = renderCompleteLyrics(); break;
+        case 'five-seconds':    content.innerHTML = renderFiveSeconds(); break;
+        case 'who-am-i':        content.innerHTML = renderWhoAmI(); break;
+        case 'stop-game':       content.innerHTML = renderStopGame(); break;
+        case 'complete-story':  content.innerHTML = renderCompleteStory(); break;
+        case 'price-guess':     content.innerHTML = renderPriceGuess(); break;
+      }
+    }
+
+    // ===== TRIVIA =====
+    function renderTrivia() {
+      const questions = currentConfig.questions || [];
+      const qs = questions.length > 0 ? questions : [newTriviaQuestion()];
+      return `
+        <div class="section-card">
+          <h2>⏱️ טיימר לשאלה</h2>
+          <div class="timer-select" id="timerSelect">
+            ${[15,20,30,45,60].map(s => `
+              <button class="timer-option ${s === (currentConfig.timer||30) ? 'selected' : ''}"
+                onclick="selectTimer(${s}, this)">${s} שניות</button>
+            `).join('')}
+            <button class="timer-option ${!currentConfig.timer ? '' : ''}"
+              onclick="selectTimer(0, this)">ללא טיימר</button>
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>❓ שאלות</h2>
+          <div class="questions-list" id="questionsList">
+            ${qs.map((q, i) => renderTriviaQuestion(q, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addTriviaQuestion()" style="margin-top:12px">
+            + הוסף שאלה
+          </button>
+        </div>
+      `;
+    }
+
+    function newTriviaQuestion() {
+      return { text: '', options: ['', '', '', ''], correct: 0 };
+    }
+
+    function renderTriviaQuestion(q, i) {
+      return `
+        <div class="question-item" id="q_${i}">
+          <div class="question-item-header">
+            <span class="question-num">שאלה ${i + 1}</span>
+            <button class="remove-btn" onclick="removeTriviaQuestion(${i})">הסר</button>
+          </div>
+          <div class="input-group" style="margin-bottom:10px">
+            <input type="text" value="${escHtml(q.text)}" placeholder="כתוב את השאלה כאן..."
+              oninput="updateTriviaQuestion(${i}, 'text', this.value)" />
+          </div>
+          <div class="options-grid">
+            ${q.options.map((opt, j) => `
+              <div class="option-item">
+                <input type="radio" name="correct_${i}" value="${j}"
+                  ${q.correct === j ? 'checked' : ''}
+                  onchange="updateTriviaQuestion(${i}, 'correct', ${j})" />
+                <input type="text" value="${escHtml(opt)}" placeholder="אפשרות ${j + 1}"
+                  oninput="updateTriviaOption(${i}, ${j}, this.value)" />
+              </div>
+            `).join('')}
+          </div>
+          <p style="font-size:0.75rem;color:var(--green);margin-top:8px;">✓ בחר תשובה נכונה בעיגול</p>
+        </div>
+      `;
+    }
+
+    function getTriviaQuestions() {
+      const items = document.querySelectorAll('.question-item');
+      const questions = [];
+      items.forEach((item, i) => {
+        const text = item.querySelector('input[type="text"]').value;
+        const opts = Array.from(item.querySelectorAll('.option-item input[type="text"]')).map(el => el.value);
+        const correct = Array.from(item.querySelectorAll('input[type="radio"]')).findIndex(r => r.checked);
+        questions.push({ text, options: opts, correct: correct >= 0 ? correct : 0 });
+      });
+      return questions;
+    }
+
+    function addTriviaQuestion() {
+      const list = document.getElementById('questionsList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderTriviaQuestion(newTriviaQuestion(), count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removeTriviaQuestion(i) {
+      const items = document.querySelectorAll('.question-item');
+      if (items.length <= 1) { alert('חייבת להיות לפחות שאלה אחת'); return; }
+      items[i].remove();
+      // Re-number
+      document.querySelectorAll('.question-num').forEach((el, idx) => { el.textContent = `שאלה ${idx + 1}`; });
+    }
+
+    function updateTriviaQuestion(i, field, val) {}
+    function updateTriviaOption(i, j, val) {}
+
+    function selectTimer(s, btn) {
+      document.querySelectorAll('.timer-option').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      timerSeconds = s;
+    }
+
+    // ===== TRUTH OR DARE =====
+    function renderTruthDare() {
+      const truths = currentConfig.truths || ['מה הסוד הכי מביך שלך?', 'מה היה הרגע הכי מביך בחייך?'];
+      const dares = currentConfig.dares || ['עשה 10 קפיצות על רגל אחת', 'חקה מישהו בחדר'];
+      return `
+        <div class="section-card">
+          <h2>💡 אמיתות</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">כתוב שאלות — שאלה בכל שורה</p>
+          <div class="input-group">
+            <textarea id="truthsArea" rows="8" placeholder="מה הסוד הכי מביך שלך?&#10;מה עשית ולא סיפרת להורים?&#10;...">${truths.join('\n')}</textarea>
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>🔥 אומץ</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">כתוב אתגרים — אתגר בכל שורה</p>
+          <div class="input-group">
+            <textarea id="daresArea" rows="8" placeholder="עשה 10 קפיצות על רגל אחת&#10;חקה מישהו בחדר&#10;...">${dares.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== WOULD YOU RATHER =====
+    function renderWouldRather() {
+      const dilemmas = currentConfig.dilemmas || [
+        { a: 'לאכול רק פיצה לכל החיים', b: 'לאכול רק סושי לכל החיים' },
+        { a: 'לעוף בלי כנפיים', b: 'לנסוע בזמן לעבר' }
+      ];
+      return `
+        <div class="section-card">
+          <h2>⚡ דילמות</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">הוסף דילמות מצחיקות ומביכות</p>
+          <div id="dilemmasList">
+            ${dilemmas.map((d, i) => renderDilemma(d, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addDilemma()">+ הוסף דילמה</button>
+        </div>
+      `;
+    }
+
+    function renderDilemma(d, i) {
+      return `
+        <div class="dilemma-item" id="dil_${i}">
+          <div class="input-group" style="margin:0">
+            <input type="text" value="${escHtml(d.a)}" placeholder="אפשרות א׳..." />
+          </div>
+          <div class="vs-badge">VS</div>
+          <div class="input-group" style="margin:0">
+            <input type="text" value="${escHtml(d.b)}" placeholder="אפשרות ב׳..." />
+          </div>
+          <div class="pair-remove" style="margin-top:8px">
+            <button class="remove-btn" onclick="removeDilemma(${i})">הסר דילמה</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function addDilemma() {
+      const list = document.getElementById('dilemmasList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderDilemma({ a: '', b: '' }, count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removeDilemma(i) {
+      const items = document.querySelectorAll('.dilemma-item');
+      if (items.length <= 1) { alert('חייבת להיות לפחות דילמה אחת'); return; }
+      items[i].remove();
+    }
+
+    // ===== MOST LIKELY TO =====
+    function renderMostLikely() {
+      const statements = currentConfig.statements || [
+        'לאחר לאירוע',
+        'לשכוח את שם של מישהו שהוא מכיר',
+        'לצחוק ברגע הכי לא מתאים'
+      ];
+      return `
+        <div class="section-card">
+          <h2>👆 משפטים</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">כתוב "הכי סביר ש..." — משפט בכל שורה</p>
+          <div class="input-group">
+            <textarea id="statementsArea" rows="10" placeholder="לאחר לאירוע&#10;לשכוח שם של מישהו&#10;לצחוק ברגע הכי לא מתאים&#10;...">${statements.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== HOT SEAT =====
+    function renderHotSeat() {
+      const questions = currentConfig.questions || [
+        'מה הדבר הכי מביך שעשית?',
+        'מי בחדר הכי מצחיקך?',
+        'מה הסוד שלא סיפרת לאיש?'
+      ];
+      return `
+        <div class="section-card">
+          <h2>🪑 שאלות לכיסא החם</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">שאלות שיישאלו לשחקן — שאלה בכל שורה</p>
+          <div class="input-group">
+            <textarea id="hotSeatArea" rows="10" placeholder="מה הדבר הכי מביך שעשית?&#10;מי בחדר הכי מצחיקך?&#10;...">${questions.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== EMOJI RIDDLES =====
+    function renderEmojiRiddles() {
+      const riddles = currentConfig.riddles || [
+        { emojis: '🦁👑', answer: 'המלך האריה' },
+        { emojis: '🧊❄️👸', answer: 'פרוזן' },
+        { emojis: '🕷️🕸️👨', answer: 'ספיידרמן' }
+      ];
+      return `
+        <div class="section-card">
+          <h2>🎭 חידות אמוג'י</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">הוסף אמוג'ים ותשובה לכל חידה</p>
+          <div id="riddlesList">
+            ${riddles.map((r, i) => renderRiddle(r, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addRiddle()">+ הוסף חידה</button>
+        </div>
+      `;
+    }
+
+    function renderRiddle(r, i) {
+      return `
+        <div class="question-item" id="rid_${i}" style="margin-bottom:10px">
+          <div class="question-item-header">
+            <span class="question-num">חידה ${i + 1}</span>
+            <button class="remove-btn" onclick="removeRiddle(${i})">הסר</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="input-group" style="margin:0">
+              <label>אמוג'ים</label>
+              <input type="text" value="${escHtml(r.emojis)}" placeholder="🦁👑..." />
+            </div>
+            <div class="input-group" style="margin:0">
+              <label>תשובה</label>
+              <input type="text" value="${escHtml(r.answer)}" placeholder="המלך האריה..." />
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function addRiddle() {
+      const list = document.getElementById('riddlesList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderRiddle({ emojis: '', answer: '' }, count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removeRiddle(i) {
+      const items = document.querySelectorAll('#riddlesList .question-item');
+      if (items.length <= 1) { alert('חייבת להיות לפחות חידה אחת'); return; }
+      items[i].remove();
+    }
+
+    // ===== NEVER HAVE I EVER =====
+    function renderNeverHaveI() {
+      const statements = currentConfig.statements || [
+        'נסעתי לחו"ל לבד',
+        'שיקרתי להורים שלי ויצאתי ממנה בשלום',
+        'שרתי קריוקי בפומבי',
+        'שכחתי יום הולדת של מישהו קרוב'
+      ];
+      return `
+        <div class="section-card">
+          <h2>🙈 משפטי "אני מעולם לא..."</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">
+            כל מי שעשה זאת — שותה/מניף יד/עושה פעולה שתגדירו! משפט בכל שורה.
+          </p>
+          <div class="input-group">
+            <textarea id="neverStatementsArea" rows="10"
+              placeholder="נסעתי לחו&quot;ל לבד&#10;שיקרתי להורים ויצאתי בשלום&#10;...">${statements.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== COMPLETE THE LYRICS =====
+    function renderCompleteLyrics() {
+      const songs = currentConfig.songs || [
+        { partial: 'אנחנו כולנו...', answer: 'ילדי השמש (שלמה ארצי)', hint: 'שלמה ארצי' },
+        { partial: 'הכל פתוח, הכל אפשרי...', answer: 'הכל פתוח (אביב גפן)', hint: 'אביב גפן' }
+      ];
+      return `
+        <div class="section-card">
+          <h2>🎤 שירים</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+            כתוב חלק מהמילים של שיר — השחקנים ישלימו!
+          </p>
+          <div id="songsList">
+            ${songs.map((s, i) => renderSongItem(s, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addSong()">+ הוסף שיר</button>
+        </div>
+      `;
+    }
+
+    function renderSongItem(s, i) {
+      return `
+        <div class="question-item" id="song_${i}" style="margin-bottom:10px">
+          <div class="question-item-header">
+            <span class="question-num">שיר ${i + 1}</span>
+            <button class="remove-btn" onclick="removeSong(${i})">הסר</button>
+          </div>
+          <div style="display:grid;gap:8px">
+            <div class="input-group" style="margin:0">
+              <label>מילים חלקיות (מה מציגים)</label>
+              <input type="text" value="${escHtml(s.partial)}" placeholder='אנחנו כולנו...' />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="input-group" style="margin:0">
+                <label>תשובה נכונה</label>
+                <input type="text" value="${escHtml(s.answer)}" placeholder="המשך המילים" />
+              </div>
+              <div class="input-group" style="margin:0">
+                <label>רמז (שם האמן/שיר)</label>
+                <input type="text" value="${escHtml(s.hint)}" placeholder="שלמה ארצי..." />
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function addSong() {
+      const list = document.getElementById('songsList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderSongItem({ partial: '', answer: '', hint: '' }, count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removeSong(i) {
+      const items = document.querySelectorAll('#songsList .question-item');
+      if (items.length <= 1) { alert('חייב להיות לפחות שיר אחד'); return; }
+      items[i].remove();
+    }
+
+    // ===== FIVE SECONDS =====
+    function renderFiveSeconds() {
+      const categories = currentConfig.categories || [
+        'שמות פרחים',
+        'מדינות באירופה',
+        'דברים שיש במטבח',
+        'שחקני כדורגל ישראלים'
+      ];
+      return `
+        <div class="section-card">
+          <h2>⏱️ קטגוריות</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">
+            השחקן חייב לציין 3 דברים מהקטגוריה תוך 5 שניות! קטגוריה בכל שורה.
+          </p>
+          <div class="input-group">
+            <textarea id="categoriesArea" rows="10"
+              placeholder="שמות פרחים&#10;מדינות באירופה&#10;דברים שיש במטבח&#10;...">${categories.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== WHO AM I =====
+    function renderWhoAmI() {
+      const characters = currentConfig.characters || [
+        { name: 'משה רבנו', clues: ['מנהיג דתי', 'ניצל מהים', 'פיצל את הים'] },
+        { name: 'אריאל שרון', clues: ['ראש ממשלה', 'גנרל', 'הקים מפלגה'] }
+      ];
+      return `
+        <div class="section-card">
+          <h2>🎭 דמויות</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+            הוסף דמויות ורמזים — השחקנים ינחשו מי הם!
+          </p>
+          <div id="charactersList">
+            ${characters.map((c, i) => renderCharacterItem(c, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addCharacter()">+ הוסף דמות</button>
+        </div>
+      `;
+    }
+
+    function renderCharacterItem(c, i) {
+      return `
+        <div class="question-item" id="char_${i}" style="margin-bottom:10px">
+          <div class="question-item-header">
+            <span class="question-num">דמות ${i + 1}</span>
+            <button class="remove-btn" onclick="removeCharacter(${i})">הסר</button>
+          </div>
+          <div style="display:grid;gap:8px">
+            <div class="input-group" style="margin:0">
+              <label>שם הדמות (סודי!)</label>
+              <input type="text" value="${escHtml(c.name)}" placeholder="למשל: דוד בן-גוריון" />
+            </div>
+            <div class="input-group" style="margin:0">
+              <label>רמזים (שורה = רמז אחד, מ-קל לקשה)</label>
+              <textarea rows="3" placeholder="ראש ממשלה ראשון&#10;נולד בפולין&#10;...">${(c.clues || []).join('\n')}</textarea>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function addCharacter() {
+      const list = document.getElementById('charactersList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderCharacterItem({ name: '', clues: [] }, count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removeCharacter(i) {
+      const items = document.querySelectorAll('#charactersList .question-item');
+      if (items.length <= 1) { alert('חייבת להיות לפחות דמות אחת'); return; }
+      items[i].remove();
+    }
+
+    // ===== STOP GAME =====
+    function renderStopGame() {
+      const categories = currentConfig.categories || ['שם', 'עיר', 'חיה', 'פרי/ירק', 'מקצוע', 'סרט/שיר'];
+      const letters = currentConfig.letters || ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'פ', 'צ', 'ר', 'ש', 'ת'];
+      return `
+        <div class="section-card">
+          <h2>📋 קטגוריות</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">
+            הקטגוריות שיוצגו על המסך — קטגוריה בכל שורה
+          </p>
+          <div class="input-group">
+            <textarea id="stopCategoriesArea" rows="8"
+              placeholder="שם&#10;עיר&#10;חיה&#10;...">${categories.join('\n')}</textarea>
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>🔤 אותיות לשימוש</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">
+            האותיות שיוגרלו בכל סיבוב — אות בכל שורה (או השאר ברירת מחדל)
+          </p>
+          <div class="input-group">
+            <textarea id="stopLettersArea" rows="4"
+              placeholder="א&#10;ב&#10;ג&#10;...">${letters.join('\n')}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    // ===== COMPLETE THE STORY =====
+    function renderCompleteStory() {
+      const opener = currentConfig.opener || 'היה היה פעם אחת...';
+      return `
+        <div class="section-card">
+          <h2>📖 פתיחת הסיפור</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px;">
+            המשפט שמתחיל את הסיפור — כולם ימשיכו ממנו
+          </p>
+          <div class="input-group">
+            <input type="text" id="storyOpener" value="${escHtml(opener)}"
+              placeholder="היה היה פעם אחת..." />
+          </div>
+        </div>
+        <div class="section-card">
+          <h2>⚙️ הגדרות</h2>
+          <div class="input-group">
+            <label>מספר שחקנים (כמה תורות)</label>
+            <select id="storyRounds">
+              ${[3,4,5,6,7,8,10].map(n => `<option value="${n}" ${(currentConfig.rounds||5)===n?'selected':''}>${n} שחקנים</option>`).join('')}
+            </select>
+          </div>
+          <p style="font-size:0.82rem;color:var(--text-muted)">
+            💡 כל שחקן יקליד משפט אחד במחשב, לא יראה מה כתבו לפניו עד הסוף!
+          </p>
+        </div>
+      `;
+    }
+
+    // ===== PRICE GUESS =====
+    function renderPriceGuess() {
+      const items = currentConfig.items || [
+        { name: 'אבוקדו אחד בסופר', price: '7' },
+        { name: 'כרטיס לסרט בסינמה סיטי', price: '42' },
+        { name: 'ג\'ינס ב-H&M', price: '150' }
+      ];
+      return `
+        <div class="section-card">
+          <h2>💰 מוצרים ומחירים</h2>
+          <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:16px;">
+            הוסף מוצרים — השחקנים ינחשו את המחיר לפני החשיפה
+          </p>
+          <div id="priceItemsList">
+            ${items.map((item, i) => renderPriceItem(item, i)).join('')}
+          </div>
+          <button class="add-item-btn" onclick="addPriceItem()">+ הוסף מוצר</button>
+        </div>
+      `;
+    }
+
+    function renderPriceItem(item, i) {
+      return `
+        <div class="question-item" id="price_${i}" style="margin-bottom:10px">
+          <div class="question-item-header">
+            <span class="question-num">מוצר ${i + 1}</span>
+            <button class="remove-btn" onclick="removePriceItem(${i})">הסר</button>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+            <div class="input-group" style="margin:0">
+              <label>שם המוצר</label>
+              <input type="text" value="${escHtml(item.name)}" placeholder="אבוקדו אחד בסופר..." />
+            </div>
+            <div class="input-group" style="margin:0">
+              <label>מחיר (₪)</label>
+              <input type="number" value="${escHtml(item.price)}" placeholder="49" min="0" />
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function addPriceItem() {
+      const list = document.getElementById('priceItemsList');
+      const count = list.children.length;
+      const div = document.createElement('div');
+      div.innerHTML = renderPriceItem({ name: '', price: '' }, count);
+      list.appendChild(div.firstElementChild);
+    }
+
+    function removePriceItem(i) {
+      const items = document.querySelectorAll('#priceItemsList .question-item');
+      if (items.length <= 1) { alert('חייב להיות לפחות מוצר אחד'); return; }
+      items[i].remove();
+    }
+
+    // ===== COLLECT CONFIG =====
+    function collectConfig(type) {
+      switch (type) {
+        case 'trivia': {
+          return {
+            timer: timerSeconds,
+            questions: getTriviaQuestions()
+          };
+        }
+        case 'truth-dare': {
+          const truths = document.getElementById('truthsArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          const dares = document.getElementById('daresArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { truths, dares };
+        }
+        case 'would-rather': {
+          const items = document.querySelectorAll('.dilemma-item');
+          const dilemmas = Array.from(items).map(item => {
+            const inputs = item.querySelectorAll('input[type="text"]');
+            return { a: inputs[0].value, b: inputs[1].value };
+          }).filter(d => d.a || d.b);
+          return { dilemmas };
+        }
+        case 'most-likely': {
+          const statements = document.getElementById('statementsArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { statements };
+        }
+        case 'hot-seat': {
+          const questions = document.getElementById('hotSeatArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { questions };
+        }
+        case 'emoji-riddles': {
+          const items = document.querySelectorAll('#riddlesList .question-item');
+          const riddles = Array.from(items).map(item => {
+            const inputs = item.querySelectorAll('input[type="text"]');
+            return { emojis: inputs[0].value, answer: inputs[1].value };
+          }).filter(r => r.emojis);
+          return { riddles };
+        }
+        case 'never-have-i': {
+          const statements = document.getElementById('neverStatementsArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { statements };
+        }
+        case 'complete-lyrics': {
+          const items = document.querySelectorAll('#songsList .question-item');
+          const songs = Array.from(items).map(item => {
+            const inputs = item.querySelectorAll('input[type="text"]');
+            return { partial: inputs[0].value, answer: inputs[1].value, hint: inputs[2].value };
+          }).filter(s => s.partial);
+          return { songs };
+        }
+        case 'five-seconds': {
+          const categories = document.getElementById('categoriesArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { categories };
+        }
+        case 'who-am-i': {
+          const items = document.querySelectorAll('#charactersList .question-item');
+          const characters = Array.from(items).map(item => {
+            const nameInput = item.querySelector('input[type="text"]');
+            const cluesTA = item.querySelector('textarea');
+            return {
+              name: nameInput.value,
+              clues: cluesTA.value.split('\n').map(s => s.trim()).filter(Boolean)
+            };
+          }).filter(c => c.name);
+          return { characters };
+        }
+        case 'stop-game': {
+          const categories = document.getElementById('stopCategoriesArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          const letters = document.getElementById('stopLettersArea').value.split('\n').map(s => s.trim()).filter(Boolean);
+          return { categories, letters: letters.length > 0 ? letters : ['א','ב','ג','ד','ה','ו','ז','ח','י','כ','ל','מ','נ','ס','פ','ר','ש','ת'] };
+        }
+        case 'complete-story': {
+          const opener = document.getElementById('storyOpener').value.trim() || 'היה היה פעם...';
+          const rounds = parseInt(document.getElementById('storyRounds').value) || 5;
+          return { opener, rounds, sentences: [opener] };
+        }
+        case 'price-guess': {
+          const priceItems = document.querySelectorAll('#priceItemsList .question-item');
+          const items = Array.from(priceItems).map(item => {
+            const inputs = item.querySelectorAll('input');
+            return { name: inputs[0].value, price: inputs[1].value };
+          }).filter(it => it.name);
+          return { items };
+        }
+        default: return {};
+      }
+    }
+
+    function saveAndPlay() {
+      const type = gameType || (editId ? STORAGE.getGame(editId)?.type : null);
+      if (!type) return;
+
+      const name = document.getElementById('gameName').value.trim() || GAME_TYPES[type]?.name || 'משחק חדש';
+      const config = collectConfig(type);
+      const user = AUTH.getCurrentUser();
+
+      const gameId = editId || ('g_' + Date.now());
+      STORAGE.saveGame({
+        id: gameId,
+        userId: user.id,
+        type,
+        name,
+        config
+      });
+
+      window.location.href = `play.html?id=${gameId}`;
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>

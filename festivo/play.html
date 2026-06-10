@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - משחק</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body { overflow: hidden; }
+    .play-page { height: 100vh; display: flex; flex-direction: column; }
+    .play-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px 80px;
+      overflow-y: auto;
+    }
+    .play-footer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      padding: 16px 24px;
+      background: rgba(15,14,23,0.95);
+      backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      z-index: 50;
+    }
+    .round-info { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
+
+    /* Score display */
+    .score-display {
+      background: rgba(124,58,237,0.15);
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--purple-light);
+    }
+
+    /* Card transition */
+    .card-enter { animation: cardEnter 0.35s ease; }
+    @keyframes cardEnter {
+      from { opacity: 0; transform: translateY(20px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .card-exit { animation: cardExit 0.25s ease forwards; }
+    @keyframes cardExit {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(-15px); }
+    }
+
+    /* Confetti */
+    .confetti-piece { animation-duration: 2.5s; }
+
+    /* Truth vs Dare tabs */
+    .td-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 12px;
+      padding: 4px;
+    }
+    .td-tab {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .td-tab.active {
+      background: var(--card2);
+      color: var(--text);
+    }
+    .td-tab.truth.active { color: var(--teal); }
+    .td-tab.dare.active { color: var(--coral); }
+  </style>
+</head>
+<body>
+  <div class="play-page" id="playPage">
+    <!-- Header -->
+    <div class="play-header">
+      <a href="dashboard.html" class="btn-icon" title="יציאה" style="text-decoration:none">
+        ✕
+      </a>
+      <h2 id="gameTitle">משחק</h2>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+      </div>
+      <div class="score-display" id="scoreDisplay" style="display:none">0 נק'</div>
+    </div>
+
+    <!-- Content area -->
+    <div class="play-content" id="playContent">
+      <div style="text-align:center;color:var(--text-muted)">טוען...</div>
+    </div>
+
+    <!-- Footer -->
+    <div class="play-footer">
+      <span class="round-info" id="roundInfo"></span>
+      <button class="btn btn-primary" id="nextBtn" onclick="nextRound()">הבא ←</button>
+    </div>
+  </div>
+
+  <!-- Confetti container -->
+  <div class="confetti-container" id="confettiContainer"></div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    const user = AUTH.requireAuth();
+    const params = new URLSearchParams(location.search);
+    const gameId = params.get('id');
+
+    let game = null;
+    let currentIndex = 0;
+    let score = 0;
+    let answered = false;
+    let timerInterval = null;
+    let tdMode = 'truth'; // for truth-dare
+
+    if (user && gameId) {
+      game = STORAGE.getGame(gameId);
+      if (!game) { window.location.href = 'dashboard.html'; }
+      else { initGame(); }
+    } else {
+      window.location.href = 'dashboard.html';
+    }
+
+    function initGame() {
+      const gt = GAME_TYPES[game.type] || {};
+      document.title = `Festivo - ${game.name}`;
+      document.getElementById('gameTitle').textContent = `${gt.icon || ''} ${game.name}`;
+
+      if (game.type === 'trivia') {
+        document.getElementById('scoreDisplay').style.display = 'block';
+      }
+
+      renderRound();
+    }
+
+    function getItems() {
+      const c = game.config || {};
+      switch (game.type) {
+        case 'trivia':          return c.questions || [];
+        case 'truth-dare':      return [...(c.truths || []).map(t => ({type:'truth', text:t})),
+                                         ...(c.dares || []).map(d => ({type:'dare', text:d}))];
+        case 'would-rather':    return c.dilemmas || [];
+        case 'most-likely':     return c.statements || [];
+        case 'hot-seat':        return c.questions || [];
+        case 'emoji-riddles':   return c.riddles || [];
+        case 'never-have-i':    return c.statements || [];
+        case 'complete-lyrics': return c.songs || [];
+        case 'five-seconds':    return c.categories || [];
+        case 'who-am-i':        return c.characters || [];
+        case 'stop-game':       return c.letters ? c.letters.map(l => ({ letter: l, categories: c.categories || [] })) : [];
+        case 'complete-story':  return Array.from({ length: (c.rounds || 5) }, (_, i) => i);
+        case 'price-guess':     return c.items || [];
+        default: return [];
+      }
+    }
+
+    function renderRound() {
+      const items = getItems();
+      if (currentIndex >= items.length) {
+        showEndScreen();
+        return;
+      }
+
+      const item = items[currentIndex];
+      const total = items.length;
+      const pct = (currentIndex / total) * 100;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('roundInfo').textContent = `${currentIndex + 1} / ${total}`;
+
+      const content = document.getElementById('playContent');
+      content.innerHTML = '';
+
+      let html = '';
+      try {
+        switch (game.type) {
+          case 'trivia':          html = renderTriviaRound(item, currentIndex); break;
+          case 'truth-dare':      html = renderTruthDareRound(items); break;
+          case 'would-rather':    html = renderWYRRound(item, currentIndex); break;
+          case 'most-likely':     html = renderMLTRound(item); break;
+          case 'hot-seat':        html = renderHotSeatRound(item, currentIndex); break;
+          case 'emoji-riddles':   html = renderEmojiRound(item); break;
+          case 'never-have-i':    html = renderNeverHaveIRound(item, currentIndex); break;
+          case 'complete-lyrics': html = renderLyricsRound(item, currentIndex); break;
+          case 'five-seconds':    html = renderFiveSecondsRound(item, currentIndex); break;
+          case 'who-am-i':        html = renderWhoAmIRound(item, currentIndex); break;
+          case 'stop-game':       html = renderStopRound(item, currentIndex); break;
+          case 'complete-story':  html = renderStoryRound(currentIndex); break;
+          case 'price-guess':     html = renderPriceRound(item, currentIndex); break;
+        }
+      } catch(err) {
+        console.error('Render error:', err);
+        html = `
+          <div style="text-align:center;padding:40px 20px">
+            <div style="font-size:3rem;margin-bottom:16px">⚠️</div>
+            <h3 style="color:var(--coral);margin-bottom:8px">שגיאה בטעינת הסיבוב</h3>
+            <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:20px">${err.message || 'שגיאה לא ידועה'}</p>
+            <button class="btn btn-primary btn-sm" onclick="nextRound()">דלג ←</button>
+          </div>
+        `;
+      }
+
+      content.innerHTML = `<div class="card-enter" style="width:100%;display:flex;flex-direction:column;align-items:center">${html}</div>`;
+      answered = false;
+
+      // Hide Next button for complete-story (it has its own flow)
+      document.getElementById('nextBtn').style.display =
+        game.type === 'complete-story' ? 'none' : '';
+
+      // Start timer for trivia
+      if (game.type === 'trivia' && game.config.timer > 0) {
+        startTimer(game.config.timer);
+      }
+    }
+
+    // ===== TRIVIA =====
+    function renderTriviaRound(q, i) {
+      const timer = game.config.timer || 0;
+      return `
+        <div class="question-card" style="max-width:600px;width:100%">
+          ${timer > 0 ? `
+            <div class="timer-bar-wrap" id="timerBar">
+              <div class="timer-bar-fill" id="timerFill" style="width:100%"></div>
+            </div>
+          ` : ''}
+          <div class="question-num-label">שאלה ${i + 1}</div>
+          <div class="question-text">${escHtml(q.text || 'שאלה ריקה')}</div>
+          <div class="answer-options" id="answerOptions">
+            ${(q.options || []).map((opt, j) => `
+              <button class="answer-btn" onclick="selectAnswer(${j}, ${q.correct})" id="ans_${j}">
+                ${escHtml(opt || `אפשרות ${j + 1}`)}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function selectAnswer(chosen, correct) {
+      if (answered) return;
+      answered = true;
+      clearTimer();
+
+      const btns = document.querySelectorAll('.answer-btn');
+      btns.forEach((b, i) => {
+        if (i === correct) b.classList.add('correct');
+        else if (i === chosen) b.classList.add('wrong');
+        b.disabled = true;
+      });
+
+      if (chosen === correct) {
+        score++;
+        document.getElementById('scoreDisplay').textContent = score + ' נק\'';
+      }
+    }
+
+    function startTimer(seconds) {
+      clearTimer();
+      let remaining = seconds;
+      const fill = document.getElementById('timerFill');
+      timerInterval = setInterval(() => {
+        remaining--;
+        if (fill) fill.style.width = (remaining / seconds * 100) + '%';
+        if (remaining <= 0) {
+          clearTimer();
+          if (!answered) {
+            answered = true;
+            const correct = getItems()[currentIndex].correct;
+            const btns = document.querySelectorAll('.answer-btn');
+            if (btns[correct]) btns[correct].classList.add('correct');
+            btns.forEach(b => b.disabled = true);
+          }
+        }
+      }, 1000);
+    }
+
+    function clearTimer() {
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+    }
+
+    // ===== TRUTH OR DARE =====
+    function renderTruthDareRound(items) {
+      const truths = items.filter(i => i.type === 'truth').map(i => i.text);
+      const dares = items.filter(i => i.type === 'dare').map(i => i.text);
+      const pool = tdMode === 'truth' ? truths : dares;
+      const randomItem = pool[Math.floor(Math.random() * pool.length)] || 'אין פריטים';
+      const flipColor = tdMode === 'truth' ? '#1e3a5f' : '#3d1a1a';
+      const flipAccent = tdMode === 'truth' ? 'var(--teal)' : 'var(--coral)';
+
+      return `
+        <div class="td-tabs" style="width:100%;max-width:500px">
+          <button class="td-tab truth ${tdMode === 'truth' ? 'active' : ''}" onclick="setTDMode('truth')">💡 אמת</button>
+          <button class="td-tab dare ${tdMode === 'dare' ? 'active' : ''}" onclick="setTDMode('dare')">🔥 אומץ</button>
+        </div>
+        <div class="flip-card" id="flipCard" onclick="flipCard()">
+          <div class="flip-card-inner">
+            <div class="flip-front" style="background:linear-gradient(135deg, var(--purple-dark), var(--purple))">
+              <span class="flip-label">${tdMode === 'truth' ? 'אמת' : 'אומץ'}</span>
+              <span class="flip-hint">${tdMode === 'truth' ? '💡' : '🔥'}</span>
+              <div style="font-size:1.1rem;font-weight:600">לחץ לחשיפה</div>
+              <span class="flip-tap">הקש כדי לגלות</span>
+            </div>
+            <div class="flip-back" style="background:linear-gradient(135deg, ${flipColor}, ${flipColor}cc)">
+              <div class="flip-content" style="color:${flipAccent}">${escHtml(randomItem)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function setTDMode(mode) {
+      tdMode = mode;
+      renderRound();
+    }
+
+    function flipCard() {
+      document.getElementById('flipCard').classList.toggle('flipped');
+    }
+
+    // ===== WOULD YOU RATHER =====
+    function renderWYRRound(d, i) {
+      return `
+        <div class="wyr-card" style="width:100%;max-width:600px">
+          <div style="text-align:center;margin-bottom:20px">
+            <span class="badge badge-gold" style="font-size:0.9rem">מה עדיף?</span>
+          </div>
+          <div class="wyr-options" id="wyrOptions">
+            <div class="wyr-option" id="wyrA" onclick="selectWYR('a')">
+              ${escHtml(d.a || 'אפשרות א׳')}
+            </div>
+            <div class="wyr-vs">VS</div>
+            <div class="wyr-option" id="wyrB" onclick="selectWYR('b')">
+              ${escHtml(d.b || 'אפשרות ב׳')}
+            </div>
+          </div>
+          <div style="text-align:center;color:var(--text-muted);font-size:0.85rem">הצביעו בחדר — לחצו על האפשרות!</div>
+        </div>
+      `;
+    }
+
+    function selectWYR(side) {
+      document.getElementById('wyrA').classList.remove('selected-a', 'selected-b');
+      document.getElementById('wyrB').classList.remove('selected-a', 'selected-b');
+      if (side === 'a') {
+        document.getElementById('wyrA').classList.add('selected-a');
+      } else {
+        document.getElementById('wyrB').classList.add('selected-b');
+      }
+    }
+
+    // ===== MOST LIKELY TO =====
+    function renderMLTRound(statement) {
+      return `
+        <div class="mlt-card card-enter" style="animation:none">
+          <div class="mlt-label">הכי סביר ש...</div>
+          <div class="mlt-question">${escHtml(statement)}</div>
+          <p style="margin-top:24px;color:var(--text-muted);font-size:0.9rem">
+            כולם מצביעים ביחד — 1, 2, 3... הצביעו! 👆
+          </p>
+        </div>
+      `;
+    }
+
+    // ===== HOT SEAT =====
+    let hotSeatFlipped = false;
+    function renderHotSeatRound(q, i) {
+      return `
+        <div style="text-align:center;margin-bottom:16px;color:var(--text-muted);font-size:0.9rem">
+          שאלה ${i + 1} לשחקן בכיסא החם
+        </div>
+        <div class="flip-card" id="hotFlip" onclick="flipHotSeat()">
+          <div class="flip-card-inner">
+            <div class="flip-front">
+              <span class="flip-hint">🪑</span>
+              <div style="font-size:1.1rem;font-weight:600">שאלה חדשה!</div>
+              <span class="flip-tap">לחץ כדי לגלות</span>
+            </div>
+            <div class="flip-back">
+              <div class="flip-content">${escHtml(q)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function flipHotSeat() {
+      document.getElementById('hotFlip').classList.toggle('flipped');
+    }
+
+    // ===== EMOJI RIDDLES =====
+    function renderEmojiRound(r) {
+      return `
+        <div class="emoji-riddle-card">
+          <div style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">נחש את ה...</div>
+          <div class="emoji-display">${r.emojis || '🎭'}</div>
+          <button class="reveal-btn" onclick="revealEmoji()">הצג תשובה</button>
+          <div class="answer-reveal" id="emojiAnswer">${escHtml(r.answer || '?')}</div>
+        </div>
+      `;
+    }
+
+    function revealEmoji() {
+      document.getElementById('emojiAnswer').classList.add('show');
+    }
+
+    // ===== NEVER HAVE I EVER =====
+    function renderNeverHaveIRound(statement, i) {
+      return `
+        <div class="mlt-card card-enter" style="animation:none;max-width:600px;width:100%">
+          <div class="mlt-label" style="color:var(--gold)">אני מעולם לא...</div>
+          <div class="mlt-question">${escHtml(statement)}</div>
+          <p style="margin-top:24px;color:var(--text-muted);font-size:0.9rem">
+            כל מי שכן עשה זאת — מניף יד! 🙋
+          </p>
+        </div>
+      `;
+    }
+
+    // ===== COMPLETE THE LYRICS =====
+    function renderLyricsRound(song, i) {
+      return `
+        <div class="question-card" style="max-width:600px;width:100%;text-align:center">
+          <div class="question-num-label">שיר ${i + 1}</div>
+          <div style="font-size:2.5rem;margin-bottom:16px">🎤</div>
+          <div class="question-text">"${escHtml(song.partial || '')}..."</div>
+          ${song.hint ? `<p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px">🎵 ${escHtml(song.hint)}</p>` : ''}
+          <button class="reveal-btn" onclick="revealLyrics()" id="lyricsRevealBtn">הצג את ההמשך</button>
+          <div class="answer-reveal" id="lyricsAnswer" style="font-size:1.1rem">
+            "${escHtml(song.answer || '')}"
+          </div>
+        </div>
+      `;
+    }
+
+    function revealLyrics() {
+      document.getElementById('lyricsAnswer').classList.add('show');
+      document.getElementById('lyricsRevealBtn').style.display = 'none';
+    }
+
+    // ===== FIVE SECONDS =====
+    let fiveSecondsRunning = false;
+    let fiveSecondsTimer = null;
+
+    function renderFiveSecondsRound(category, i) {
+      return `
+        <div class="question-card" style="max-width:580px;width:100%;text-align:center">
+          <div class="question-num-label">קטגוריה ${i + 1}</div>
+          <div style="font-size:2.5rem;margin-bottom:12px">⏱️</div>
+          <div class="question-text" style="margin-bottom:12px">תציינו 3 דברים:</div>
+          <div style="font-size:1.6rem;font-weight:800;color:var(--teal);margin-bottom:24px">
+            ${escHtml(category)}
+          </div>
+          <div class="timer-bar-wrap" id="fsTimerBar" style="margin-bottom:20px;opacity:0">
+            <div class="timer-bar-fill" id="fsTimerFill" style="width:100%;background:linear-gradient(90deg,var(--teal),var(--green))"></div>
+          </div>
+          <div id="fsCountdown" style="font-size:3rem;font-weight:900;color:var(--gold);margin-bottom:20px;min-height:60px"></div>
+          <button class="btn btn-primary btn-lg" id="fsStartBtn" onclick="startFiveSeconds()">
+            ▶ התחל 5 שניות!
+          </button>
+        </div>
+      `;
+    }
+
+    function startFiveSeconds() {
+      if (fiveSecondsRunning) return;
+      fiveSecondsRunning = true;
+      document.getElementById('fsStartBtn').style.display = 'none';
+      document.getElementById('fsTimerBar').style.opacity = '1';
+      let t = 5;
+      document.getElementById('fsCountdown').textContent = t;
+      document.getElementById('fsTimerFill').style.width = '100%';
+      fiveSecondsTimer = setInterval(() => {
+        t--;
+        const el = document.getElementById('fsCountdown');
+        const fill = document.getElementById('fsTimerFill');
+        if (el) el.textContent = t > 0 ? t : '⏰';
+        if (fill) fill.style.width = Math.max(0, (t / 5) * 100) + '%';
+        if (t <= 0) {
+          clearInterval(fiveSecondsTimer);
+          fiveSecondsRunning = false;
+          if (el) {
+            el.textContent = '⏰';
+            el.style.color = 'var(--coral)';
+          }
+        }
+      }, 1000);
+    }
+
+    // ===== WHO AM I =====
+    let whoAmIClueIndex = 0;
+    let currentWhoAmIClues = [];
+
+    function renderWhoAmIRound(character, i) {
+      whoAmIClueIndex = 0;
+      currentWhoAmIClues = (character.clues || []).slice();
+      const clues = currentWhoAmIClues;
+      const clueHtml = clues.length > 0
+        ? `<div id="whoClue" style="font-size:1.3rem;font-weight:600;color:var(--purple-light);margin:20px 0 24px">${escHtml(clues[0])}</div>`
+        : `<div style="color:var(--text-muted);margin:20px 0">אין רמזים</div>`;
+
+      return `
+        <div class="question-card" style="max-width:580px;width:100%;text-align:center">
+          <div class="question-num-label">דמות ${i + 1}</div>
+          <div style="font-size:2.5rem;margin-bottom:8px">🕵️</div>
+          <div id="whoClueLabel" style="color:var(--text-muted);font-size:0.9rem;margin-bottom:4px">רמז 1 מתוך ${clues.length}</div>
+          ${clueHtml}
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px">
+            <button class="btn btn-ghost btn-sm" id="whoNextClueBtn"
+              onclick="nextWhoClue()"
+              ${clues.length <= 1 ? 'style="display:none"' : ''}>
+              רמז הבא 💡
+            </button>
+            <button class="reveal-btn" onclick="revealWhoAmI()">חשוף תשובה</button>
+          </div>
+          <div class="answer-reveal" id="whoAnswer" style="font-size:1.4rem">${escHtml(character.name)}</div>
+        </div>
+      `;
+    }
+
+    function nextWhoClue() {
+      const clues = currentWhoAmIClues;
+      if (!clues.length) return;
+      whoAmIClueIndex = Math.min(whoAmIClueIndex + 1, clues.length - 1);
+      const el = document.getElementById('whoClue');
+      if (el) el.textContent = clues[whoAmIClueIndex];
+      const labelEl = document.getElementById('whoClueLabel');
+      if (labelEl) labelEl.textContent = `רמז ${whoAmIClueIndex + 1} מתוך ${clues.length}`;
+      if (whoAmIClueIndex >= clues.length - 1) {
+        const btn = document.getElementById('whoNextClueBtn');
+        if (btn) btn.style.display = 'none';
+      }
+    }
+
+    function revealWhoAmI() {
+      const el = document.getElementById('whoAnswer');
+      if (el) el.classList.add('show');
+    }
+
+    // ===== STOP GAME =====
+    function renderStopRound(item, i) {
+      const letter = (item && item.letter) ? item.letter : '?';
+      const categories = (item && item.categories) ? item.categories : [];
+      return `
+        <div class="question-card" style="max-width:620px;width:100%;text-align:center">
+          <div class="question-num-label">סיבוב ${i + 1}</div>
+          <div style="font-size:5rem;font-weight:900;color:var(--coral);line-height:1;margin-bottom:8px">${letter}</div>
+          <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:24px">כולם ממלאים תשובות שמתחילות באות הזו!</p>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;text-align:right">
+            ${categories.map(cat => `
+              <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px">
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px">${escHtml(cat)}</div>
+                <input type="text" placeholder="${letter}..." style="background:none;border:none;color:var(--text);font-family:Poppins,sans-serif;font-size:0.95rem;width:100%;outline:none" />
+              </div>
+            `).join('')}
+          </div>
+          <p style="margin-top:20px;color:var(--text-muted);font-size:0.85rem">לחץ "הבא" כשכולם סיימו למלא 🛑</p>
+        </div>
+      `;
+    }
+
+    // ===== COMPLETE THE STORY =====
+    let storyText = '';
+    let storyInitialized = false;
+
+    function renderStoryRound(i) {
+      const config = game.config || {};
+      const totalRounds = config.rounds || 5;
+      const isFirst = i === 0;
+
+      if (isFirst && !storyInitialized) {
+        storyText = config.opener || 'היה היה פעם...';
+        storyInitialized = true;
+      }
+
+      const isLast = i === totalRounds - 1;
+
+      return `
+        <div class="question-card" style="max-width:640px;width:100%;text-align:center">
+          <div class="question-num-label">שחקן ${i + 1} מתוך ${totalRounds}</div>
+          <div style="font-size:2rem;margin-bottom:12px">📖</div>
+          <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px">
+            ${isFirst ? 'הסיפור מתחיל כך:' : 'המשך המשפט האחרון:'}
+          </p>
+          <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:20px;text-align:right;font-style:italic;color:var(--text-muted);font-size:0.9rem;max-height:120px;overflow-y:auto">
+            ${escHtml(storyText)}
+          </div>
+          <div class="input-group" style="text-align:right">
+            <label>כתוב את המשפט הבא 👇</label>
+            <textarea id="storyInput" rows="3" placeholder="המשך את הסיפור..." style="font-size:1rem"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="addStoryLine(${isLast})" style="margin-top:8px">
+            ${isLast ? 'סיים את הסיפור! 🎉' : 'העבר לשחקן הבא →'}
+          </button>
+        </div>
+      `;
+    }
+
+    function addStoryLine(isLast) {
+      const input = document.getElementById('storyInput');
+      const line = input ? input.value.trim() : '';
+      if (!line) { alert('כתוב משהו קודם!'); return; }
+      storyText += ' ' + line;
+      if (isLast) {
+        showStoryEnd();
+      } else {
+        nextRound();
+      }
+    }
+
+    function showStoryEnd() {
+      clearTimer();
+      document.getElementById('progressBar').style.width = '100%';
+      document.getElementById('nextBtn').style.display = 'none';
+      document.getElementById('roundInfo').textContent = 'הסיפור הושלם!';
+      document.getElementById('playContent').innerHTML = `
+        <div class="game-end slide-up" style="max-width:700px">
+          <span class="confetti-emoji">📖</span>
+          <h2>הסיפור הסתיים!</h2>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:right;font-size:1.05rem;line-height:1.8;margin:20px 0;color:var(--text)">
+            ${escHtml(storyText)}
+          </div>
+          <div class="end-actions">
+            <button class="btn btn-primary" onclick="restartStory()">🔄 סיפור חדש</button>
+            <a href="dashboard.html" class="btn btn-ghost">← לוח בקרה</a>
+          </div>
+        </div>
+      `;
+      launchConfetti();
+    }
+
+    function restartStory() {
+      storyInitialized = false;
+      storyText = '';
+      currentIndex = 0;
+      document.getElementById('nextBtn').style.display = '';
+      renderRound();
+    }
+
+    // ===== PRICE GUESS =====
+    function renderPriceRound(item, i) {
+      return `
+        <div class="question-card" style="max-width:560px;width:100%;text-align:center">
+          <div class="question-num-label">מוצר ${i + 1}</div>
+          <div style="font-size:2.5rem;margin-bottom:16px">💰</div>
+          <div class="question-text">${escHtml(item.name || 'מוצר')}</div>
+          <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:24px">
+            כולם מנחשים את המחיר בשקלים — מי הכי קרוב?
+          </p>
+          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+            <button class="reveal-btn" onclick="revealPrice('${escHtml(item.price)}')">חשוף מחיר</button>
+          </div>
+          <div class="answer-reveal" id="priceAnswer" style="font-size:2rem;font-weight:900;color:var(--green)">
+            ₪${escHtml(item.price)}
+          </div>
+        </div>
+      `;
+    }
+
+    function revealPrice(price) {
+      document.getElementById('priceAnswer').classList.add('show');
+    }
+
+    // ===== NEXT / END =====
+    function nextRound() {
+      clearTimer();
+      if (fiveSecondsTimer) { clearInterval(fiveSecondsTimer); fiveSecondsTimer = null; }
+      fiveSecondsRunning = false;
+      whoAmIClueIndex = 0;
+      const content = document.getElementById('playContent').firstChild;
+      if (content) content.classList.add('card-exit');
+      setTimeout(() => {
+        currentIndex++;
+        renderRound();
+      }, 200);
+    }
+
+    function showEndScreen() {
+      clearTimer();
+      document.getElementById('progressBar').style.width = '100%';
+      document.getElementById('nextBtn').style.display = 'none';
+      document.getElementById('roundInfo').textContent = 'המשחק הסתיים!';
+
+      const total = getItems().length;
+      const scoreHtml = game.type === 'trivia'
+        ? `<p style="font-size:1.1rem;margin-bottom:8px">קיבלת <strong style="color:var(--purple-light)">${score}</strong> מתוך <strong>${total}</strong> נקודות!</p>`
+        : '';
+
+      document.getElementById('playContent').innerHTML = `
+        <div class="game-end slide-up">
+          <span class="confetti-emoji">🎉</span>
+          <h2>המשחק נגמר!</h2>
+          ${scoreHtml}
+          <p>כל הכבוד לכולם!</p>
+          <div class="end-actions">
+            <button class="btn btn-primary" onclick="restartGame()">🔄 שחק שוב</button>
+            <a href="dashboard.html" class="btn btn-ghost">← לוח בקרה</a>
+            <a href="create.html" class="btn btn-outline">+ משחק חדש</a>
+          </div>
+        </div>
+      `;
+
+      launchConfetti();
+    }
+
+    function restartGame() {
+      currentIndex = 0;
+      score = 0;
+      answered = false;
+      storyInitialized = false;
+      storyText = '';
+      document.getElementById('scoreDisplay').textContent = '0 נק\'';
+      document.getElementById('nextBtn').style.display = '';
+      renderRound();
+    }
+
+    function launchConfetti() {
+      const container = document.getElementById('confettiContainer');
+      const colors = ['#7c3aed','#ff6b6b','#ffd93d','#6bcb77','#4ecdc4','#ff9ff3'];
+      for (let i = 0; i < 80; i++) {
+        setTimeout(() => {
+          const p = document.createElement('div');
+          p.className = 'confetti-piece';
+          const size = Math.random() * 12 + 6;
+          p.style.cssText = `
+            width:${size}px; height:${size}px;
+            left:${Math.random()*100}%;
+            background:${colors[Math.floor(Math.random()*colors.length)]};
+            animation-duration:${Math.random()*2+2}s;
+            animation-delay:${Math.random()*0.5}s;
+            border-radius:${Math.random() > 0.5 ? '50%' : '2px'};
+          `;
+          container.appendChild(p);
+          setTimeout(() => p.remove(), 3000);
+        }, i * 30);
+      }
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - בחר משחק</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .premium-tag {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      background: linear-gradient(135deg, #ffd93d, #ff9500);
+      color: #333;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 3px 10px;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .game-type-card { position: relative; }
+    .game-arrow {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      color: var(--text-muted);
+      font-size: 1.2rem;
+      transition: transform 0.2s, color 0.2s;
+    }
+    .game-type-card:hover .game-arrow {
+      transform: translateX(-4px);
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <a href="dashboard.html" class="logo">Festivo</a>
+    <div class="header-actions">
+      <div class="user-pill">
+        <div class="avatar" id="avatarEl"></div>
+        <span id="usernameEl"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrapper">
+    <div class="container-lg">
+      <div class="create-header">
+        <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-muted);text-decoration:none;font-size:0.9rem;margin-bottom:16px;">
+          ← חזרה
+        </a>
+        <h1>איזה משחק רוצים לשחק? 🎮</h1>
+        <p>בחר סוג משחק ואז תתאים אותו לאירוע שלך</p>
+      </div>
+
+      <div class="game-types-grid" id="gameTypesGrid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    // Premium games (just for show - context only)
+    const premiumGames = [];
+
+    const user = AUTH.requireAuth();
+    if (user) {
+      document.getElementById('usernameEl').textContent = user.username;
+      document.getElementById('avatarEl').textContent = user.username.charAt(0).toUpperCase();
+      renderGameTypes();
+    }
+
+    function renderGameTypes() {
+      const grid = document.getElementById('gameTypesGrid');
+      const colorMap = {
+        trivia: '#7c3aed',
+        'truth-dare': '#ff6b6b',
+        'would-rather': '#ffd93d',
+        'most-likely': '#6bcb77',
+        'hot-seat': '#4ecdc4',
+        'emoji-riddles': '#ff9ff3',
+        'never-have-i': '#f59e0b',
+        'complete-lyrics': '#ec4899',
+        'five-seconds': '#14b8a6',
+        'who-am-i': '#8b5cf6',
+        'stop-game': '#ef4444',
+        'complete-story': '#06b6d4',
+        'price-guess': '#10b981'
+      };
+      const tagColors = {
+        'קלאסי': 'badge-purple',
+        'חברתי': 'badge-coral',
+        'מצחיק': 'badge-gold',
+        'קבוצתי': 'badge-green',
+        'אישי': 'badge-teal',
+        'יצירתי': 'badge-purple',
+        'חשיפה': 'badge-gold',
+        'מוזיקה': 'badge-coral',
+        'מהיר': 'badge-teal',
+        'ניחוש': 'badge-purple',
+        'כתיבה': 'badge-teal'
+      };
+
+      let html = '';
+      Object.values(GAME_TYPES).forEach(g => {
+        const color = colorMap[g.id] || '#7c3aed';
+        const isPremium = premiumGames.includes(g.id);
+        const badgeClass = tagColors[g.tag] || 'badge-purple';
+        html += `
+          <a href="customize.html?game=${g.id}" class="game-type-card" style="--gcolor:${color}">
+            ${isPremium ? '<div class="premium-tag">⭐ פרמיום</div>' : ''}
+            <div class="gt-icon">${g.icon}</div>
+            <h3>${g.name}</h3>
+            <p>${g.description}</p>
+            <div class="gt-badge">
+              <span class="badge ${badgeClass}">${g.tag}</span>
+            </div>
+            <span class="game-arrow">←</span>
+          </a>
+        `;
+      });
+
+      grid.innerHTML = html;
+    }
+  </script>
+</body>
+</html>
