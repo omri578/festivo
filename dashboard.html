@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - לוח בקרה</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <a href="dashboard.html" class="logo">Festivo</a>
+    <div class="header-actions">
+      <a href="my-games.html" class="btn btn-ghost btn-sm">המשחקים שלי</a>
+      <div class="user-pill">
+        <div class="avatar" id="avatarEl"></div>
+        <span id="usernameEl"></span>
+      </div>
+      <button class="btn-icon" onclick="handleLogout()" title="התנתק">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/>
+          <line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="page-wrapper">
+    <div class="container-lg">
+      <!-- Dashboard header -->
+      <div class="dashboard-header">
+        <h1 id="greetingEl">שלום! 👋</h1>
+        <p>מה נשחק היום?</p>
+      </div>
+
+      <!-- Games grid -->
+      <div class="games-grid" id="gamesGrid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    const user = AUTH.requireAuth();
+    if (user) {
+      // Set header info
+      document.getElementById('usernameEl').textContent = user.username;
+      document.getElementById('avatarEl').textContent = user.username.charAt(0).toUpperCase();
+      document.getElementById('greetingEl').textContent = `שלום, ${user.username}! 👋`;
+
+      renderDashboard(user);
+    }
+
+    function renderDashboard(user) {
+      const grid = document.getElementById('gamesGrid');
+      const games = STORAGE.getUserGames(user.id);
+
+      let html = `
+        <a href="create.html" class="new-game-btn" id="newGameBtn">
+          <div class="plus-icon">+</div>
+          <span>משחק חדש</span>
+        </a>
+      `;
+
+      if (games.length === 0) {
+        html += `
+          <div class="empty-state" style="grid-column:2/-1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; text-align:center;">
+            <div class="empty-icon">🎮</div>
+            <h3>אין משחקים עדיין</h3>
+            <p>לחץ על "משחק חדש" כדי ליצור את המשחק הראשון שלך!</p>
+          </div>
+        `;
+      } else {
+        games.slice().reverse().forEach(game => {
+          const type = GAME_TYPES[game.type] || {};
+          const questionCount = getGameItemCount(game);
+          html += `
+            <div class="game-card-item fade-in">
+              <span class="game-type-icon">${type.icon || '🎮'}</span>
+              <h3>${escHtml(game.name)}</h3>
+              <span class="badge badge-purple">${type.name || game.type}</span>
+              <div class="game-meta">
+                ${questionCount} פריטים · ${formatDate(game.createdAt)}
+              </div>
+              <div class="game-card-actions">
+                <a href="play.html?id=${game.id}" class="btn btn-primary btn-sm">▶ שחק</a>
+                <a href="customize.html?edit=${game.id}" class="btn btn-ghost btn-sm">✏️ ערוך</a>
+                <button class="btn btn-ghost btn-sm" onclick="deleteGame('${game.id}')">🗑️</button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      grid.innerHTML = html;
+    }
+
+    function getGameItemCount(game) {
+      const c = game.config || {};
+      if (c.questions) return c.questions.length;
+      if (c.truths || c.dares) return (c.truths?.length || 0) + (c.dares?.length || 0);
+      if (c.dilemmas) return c.dilemmas.length;
+      if (c.statements) return c.statements.length;
+      if (c.riddles) return c.riddles.length;
+      return 0;
+    }
+
+    function deleteGame(id) {
+      if (confirm('למחוק את המשחק?')) {
+        STORAGE.deleteGame(id);
+        renderDashboard(AUTH.getCurrentUser());
+      }
+    }
+
+    function handleLogout() {
+      AUTH.logout();
+      window.location.href = 'index.html';
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>
+</body>
+</html>

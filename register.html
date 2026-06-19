@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - הרשמה</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="auth-page">
+    <div class="auth-card slide-up">
+      <a href="index.html" class="logo">Festivo</a>
+      <p class="auth-subtitle">הצטרף עכשיו — זה בחינם! 🎉</p>
+
+      <div class="error-msg" id="errorMsg"></div>
+
+      <!-- Google register (UI only) -->
+      <button class="btn btn-google btn-full" onclick="showGoogleNotice()">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+        הירשם עם Google
+      </button>
+
+      <div class="divider">או</div>
+
+      <form id="registerForm" onsubmit="handleRegister(event)">
+        <div class="input-group">
+          <label for="username">שם משתמש</label>
+          <input type="text" id="username" placeholder="בחר שם משתמש" autocomplete="username" required />
+        </div>
+        <div class="input-group">
+          <label for="password">סיסמה</label>
+          <input type="password" id="password" placeholder="לפחות 4 תווים" autocomplete="new-password" required />
+        </div>
+        <div class="input-group">
+          <label for="confirmPassword">אימות סיסמה</label>
+          <input type="password" id="confirmPassword" placeholder="הזן שוב את הסיסמה" autocomplete="new-password" required />
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-full" id="submitBtn">
+          הירשם עכשיו
+        </button>
+      </form>
+
+      <div class="auth-footer">
+        כבר יש לך חשבון?
+        <a href="login.html">התחבר</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script>
+    AUTH.requireGuest();
+
+    function handleRegister(e) {
+      e.preventDefault();
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const confirm = document.getElementById('confirmPassword').value;
+      const btn = document.getElementById('submitBtn');
+      const errMsg = document.getElementById('errorMsg');
+
+      errMsg.classList.remove('show');
+      errMsg.style.cssText = '';
+
+      if (password !== confirm) {
+        errMsg.textContent = 'הסיסמאות אינן תואמות';
+        errMsg.classList.add('show');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'נרשם...';
+
+      setTimeout(() => {
+        const result = AUTH.register(username, password);
+        if (result.ok) {
+          window.location.href = 'dashboard.html';
+        } else {
+          errMsg.textContent = result.error;
+          errMsg.classList.add('show');
+          btn.disabled = false;
+          btn.textContent = 'הירשם עכשיו';
+        }
+      }, 400);
+    }
+
+    function showGoogleNotice() {
+      const errMsg = document.getElementById('errorMsg');
+      errMsg.textContent = 'הרשמה עם Google אינה זמינה כרגע בגרסה זו';
+      errMsg.style.background = 'rgba(78,205,196,0.1)';
+      errMsg.style.borderColor = 'rgba(78,205,196,0.3)';
+      errMsg.style.color = 'var(--teal)';
+      errMsg.classList.add('show');
+    }
+  </script>
+</body>
+</html>

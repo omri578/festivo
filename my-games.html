@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - המשחקים שלי</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .filter-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .filter-tab {
+      padding: 8px 18px;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .filter-tab.active {
+      background: rgba(124,58,237,0.15);
+      border-color: var(--purple);
+      color: var(--purple-light);
+    }
+    .no-games {
+      text-align: center;
+      padding: 60px 20px;
+    }
+    .no-games .empty-icon { font-size: 4rem; margin-bottom: 16px; }
+    .no-games h3 { font-size: 1.3rem; font-weight: 700; margin-bottom: 8px; }
+    .no-games p { color: var(--text-muted); margin-bottom: 24px; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <a href="dashboard.html" class="logo">Festivo</a>
+    <div class="header-actions">
+      <a href="create.html" class="btn btn-primary btn-sm">+ משחק חדש</a>
+      <div class="user-pill">
+        <div class="avatar" id="avatarEl"></div>
+        <span id="usernameEl"></span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-wrapper">
+    <div class="container">
+      <div class="dashboard-header">
+        <a href="dashboard.html" style="display:inline-flex;align-items:center;gap:6px;color:var(--text-muted);text-decoration:none;font-size:0.9rem;margin-bottom:12px;">
+          ← חזרה ללוח בקרה
+        </a>
+        <h1>המשחקים שלי 🎮</h1>
+        <p id="gameCountEl">טוען...</p>
+      </div>
+
+      <!-- Filter tabs -->
+      <div class="filter-tabs" id="filterTabs">
+        <button class="filter-tab active" data-filter="all" onclick="filterGames('all', this)">הכל</button>
+      </div>
+
+      <!-- Games list -->
+      <div id="gamesList"></div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script>
+    const user = AUTH.requireAuth();
+    let currentFilter = 'all';
+
+    if (user) {
+      document.getElementById('usernameEl').textContent = user.username;
+      document.getElementById('avatarEl').textContent = user.username.charAt(0).toUpperCase();
+      renderMyGames();
+    }
+
+    function renderMyGames() {
+      const games = STORAGE.getUserGames(user.id);
+      const countEl = document.getElementById('gameCountEl');
+      countEl.textContent = `${games.length} משחקים שמורים`;
+
+      // Build filter tabs
+      const typesUsed = [...new Set(games.map(g => g.type))];
+      const tabsEl = document.getElementById('filterTabs');
+      let tabsHtml = `<button class="filter-tab ${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="filterGames('all', this)">הכל (${games.length})</button>`;
+      typesUsed.forEach(type => {
+        const gt = GAME_TYPES[type] || {};
+        const count = games.filter(g => g.type === type).length;
+        tabsHtml += `<button class="filter-tab ${currentFilter === type ? 'active' : ''}" data-filter="${type}" onclick="filterGames('${type}', this)">${gt.icon || ''} ${gt.name || type} (${count})</button>`;
+      });
+      tabsEl.innerHTML = tabsHtml;
+
+      renderList(games);
+    }
+
+    function filterGames(filter, btn) {
+      currentFilter = filter;
+      document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const games = STORAGE.getUserGames(user.id);
+      const filtered = filter === 'all' ? games : games.filter(g => g.type === filter);
+      renderList(filtered);
+    }
+
+    function renderList(games) {
+      const listEl = document.getElementById('gamesList');
+
+      if (games.length === 0) {
+        listEl.innerHTML = `
+          <div class="no-games fade-in">
+            <div class="empty-icon">🎮</div>
+            <h3>אין משחקים עדיין</h3>
+            <p>לחץ על "משחק חדש" כדי להתחיל!</p>
+            <a href="create.html" class="btn btn-primary">+ צור משחק</a>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '<div class="my-games-list">';
+      games.slice().reverse().forEach(game => {
+        const gt = GAME_TYPES[game.type] || {};
+        const count = getGameItemCount(game);
+        html += `
+          <div class="my-game-row fade-in">
+            <div class="my-game-icon">${gt.icon || '🎮'}</div>
+            <div class="my-game-info">
+              <h3>${escHtml(game.name)}</h3>
+              <span>
+                <span class="badge badge-purple" style="font-size:0.7rem">${gt.name || game.type}</span>
+                &nbsp; ${count} פריטים · ${formatDate(game.createdAt)}
+              </span>
+            </div>
+            <div class="my-game-actions">
+              <a href="play.html?id=${game.id}" class="btn btn-primary btn-sm">▶ שחק</a>
+              <a href="customize.html?edit=${game.id}" class="btn btn-ghost btn-sm">✏️</a>
+              <button class="btn btn-ghost btn-sm" onclick="confirmDelete('${game.id}', '${escHtml(game.name)}')">🗑️</button>
+            </div>
+          </div>
+        `;
+      });
+      html += '</div>';
+      listEl.innerHTML = html;
+    }
+
+    function getGameItemCount(game) {
+      const c = game.config || {};
+      if (c.questions) return c.questions.length;
+      if (c.truths || c.dares) return (c.truths?.length || 0) + (c.dares?.length || 0);
+      if (c.dilemmas) return c.dilemmas.length;
+      if (c.statements) return c.statements.length;
+      if (c.riddles) return c.riddles.length;
+      return 0;
+    }
+
+    function confirmDelete(id, name) {
+      if (confirm(`למחוק את "${name}"?`)) {
+        STORAGE.deleteGame(id);
+        renderMyGames();
+      }
+    }
+
+    function escHtml(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+  </script>
+</body>
+</html>

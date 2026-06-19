@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Festivo - משחקים לאירועים</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    /* Floating particles */
+    .particles { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.15;
+      animation: float-particle linear infinite;
+    }
+    @keyframes float-particle {
+      0% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 0.15; }
+      90% { opacity: 0.15; }
+      100% { transform: translateY(-100px) rotate(720deg); opacity: 0; }
+    }
+    .hero-visual {
+      margin-top: 40px;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .mini-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      backdrop-filter: blur(10px);
+      animation: float-card 3s ease-in-out infinite;
+    }
+    .mini-card:nth-child(2) { animation-delay: 0.5s; }
+    .mini-card:nth-child(3) { animation-delay: 1s; }
+    .mini-card:nth-child(4) { animation-delay: 1.5s; }
+    @keyframes float-card {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .mini-card .mc-icon { font-size: 1.5rem; }
+
+    .scroll-hint {
+      position: absolute;
+      bottom: 90px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      animation: bounce 2s infinite;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(6px); }
+    }
+
+    .stats-row {
+      display: flex;
+      justify-content: center;
+      gap: 40px;
+      margin-top: 48px;
+      flex-wrap: wrap;
+    }
+    .stat-item { text-align: center; }
+    .stat-num {
+      font-size: 2rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--purple-light), var(--coral));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+  <!-- Floating particles -->
+  <div class="particles" id="particles"></div>
+
+  <div class="landing-page">
+    <!-- Hero -->
+    <section class="hero" style="padding-bottom: 80px;">
+      <div class="hero-glow"></div>
+
+      <div class="hero-badge fade-in">
+        🎉 &nbsp;הפוך כל אירוע לבלתי נשכח
+      </div>
+
+      <h1 class="fade-in" style="animation-delay:0.1s">
+        משחקים שיגרמו<br />
+        לכולם <span class="gradient-text">לצחוק ולזוז</span>
+      </h1>
+
+      <p class="fade-in" style="animation-delay:0.2s">
+        צור משחקים מותאמים אישית לחתונות, ימי הולדת, מסיבות ואירועי חברה.<br />
+        בחר, התאם, שחק — בדקות ספורות.
+      </p>
+
+      <a href="login.html" class="hero-btn fade-in" style="animation-delay:0.3s">
+        בואו נתחיל! 🚀
+      </a>
+
+      <!-- Floating mini cards -->
+      <div class="hero-visual fade-in" style="animation-delay:0.4s">
+        <div class="mini-card">
+          <span class="mc-icon">🧠</span>
+          <span>חידון מותאם</span>
+        </div>
+        <div class="mini-card">
+          <span class="mc-icon">🔥</span>
+          <span>אמת או אומץ</span>
+        </div>
+        <div class="mini-card">
+          <span class="mc-icon">👆</span>
+          <span>הכי סביר ש...</span>
+        </div>
+        <div class="mini-card">
+          <span class="mc-icon">🎭</span>
+          <span>חידות אמוג'י</span>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row fade-in" style="animation-delay:0.5s">
+        <div class="stat-item">
+          <div class="stat-num">6+</div>
+          <div class="stat-label">סוגי משחקים</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">∞</div>
+          <div class="stat-label">אפשרויות התאמה</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-num">5 דק'</div>
+          <div class="stat-label">להכין משחק</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" style="padding-bottom: 80px;">
+      <h2 class="section-title">מה יש ב-Festivo?</h2>
+      <p class="section-subtitle">כל מה שצריך לאירוע מושלם, במקום אחד</p>
+      <div class="features-grid">
+        <div class="feature-card">
+          <span class="feature-icon">✏️</span>
+          <h3>התאמה מלאה</h3>
+          <p>כתוב שאלות, אתגרים ושאלות משלך. כל משחק מותאם בדיוק לאירוע שלך.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">⚡</span>
+          <h3>מהיר לשחק</h3>
+          <p>ממשק פשוט ואינטואיטיבי. לחץ "הבא" ותן לצחוקים לזרום.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">💾</span>
+          <h3>שמור המשחקים</h3>
+          <p>כל המשחקים שיצרת נשמרים. השתמש בהם שוב ושוב.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🎯</span>
+          <h3>6 סוגי משחקים</h3>
+          <p>חידון, אמת או אומץ, מה עדיף, הכי סביר ש..., כיסא חם וחידות אמוג'י.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">📱</span>
+          <h3>מותאם לנייד</h3>
+          <p>עובד מושלם על כל מסך — מחשב, טאבלט וסמארטפון.</p>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon">🆓</span>
+          <h3>חינם לשחק</h3>
+          <p>כל המשחקים הבסיסיים חינמיים לחלוטין. תיהנו!</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section style="text-align:center; padding: 40px 20px 100px; position:relative; z-index:1;">
+      <h2 style="font-size:2rem; font-weight:900; margin-bottom:12px;">מוכנים לאירוע?</h2>
+      <p style="color:var(--text-muted); margin-bottom:28px;">הצטרפו עכשיו ותנו לצחוקים להתחיל</p>
+      <a href="login.html" class="hero-btn" style="font-size:1rem; padding:16px 40px; animation:none;">
+        התחל עכשיו — בחינם! ✨
+      </a>
+    </section>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <a href="index.html" class="nav-item active">
+      <span class="nav-icon">🏠</span>
+      <span>בית</span>
+    </a>
+    <a href="#features" class="nav-item" onclick="document.querySelector('.features').scrollIntoView({behavior:'smooth'}); return false;">
+      <span class="nav-icon">🎮</span>
+      <span>משחקים</span>
+    </a>
+    <a href="#" class="nav-item">
+      <span class="nav-icon">ℹ️</span>
+      <span>אודות</span>
+    </a>
+    <a href="login.html" class="nav-item">
+      <span class="nav-icon">👤</span>
+      <span>כניסה</span>
+    </a>
+  </nav>
+
+  <script>
+    // Generate floating particles
+    const container = document.getElementById('particles');
+    const colors = ['#7c3aed', '#ff6b6b', '#ffd93d', '#6bcb77', '#4ecdc4'];
+    for (let i = 0; i < 20; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = Math.random() * 20 + 5;
+      p.style.cssText = `
+        width: ${size}px; height: ${size}px;
+        left: ${Math.random() * 100}%;
+        background: ${colors[Math.floor(Math.random() * colors.length)]};
+        animation-duration: ${Math.random() * 15 + 10}s;
+        animation-delay: ${Math.random() * -15}s;
+      `;
+      container.appendChild(p);
+    }
+  </script>
+</body>
+</html>
